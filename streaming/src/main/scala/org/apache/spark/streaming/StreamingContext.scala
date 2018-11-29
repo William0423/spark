@@ -561,7 +561,7 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    *
-   * @throws IllegalStateException if the StreamingContext is already stopped.
+   * @throws IllegalStateException if the StreamingContext is already stopped. : 如果streaming已经停止，会抛错
    */
   def start(): Unit = synchronized {
     state match {

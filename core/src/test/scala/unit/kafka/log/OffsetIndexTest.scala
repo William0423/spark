@@ -42,7 +42,7 @@ class OffsetIndexTest extends JUnitSuite {
     if(this.idx != null)
       this.idx.file.delete()
   }
-  
+
   @Test
   def randomLookupTest() {
     assertEquals("Not present value should return physical offset 0.", OffsetPosition(idx.baseOffset, 0), idx.lookup(92L))

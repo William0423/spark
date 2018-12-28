@@ -179,10 +179,21 @@ object RequestChannel extends Logging {
   case object CloseConnectionAction extends ResponseAction
 }
 
+/**
+  * 在RequestChannel中包含了一个requestQueue队列和多个responseQueues队列，每个Processor线程对应一个responseQueue。
+  *
+  */
 class RequestChannel(val numProcessors: Int, val queueSize: Int) extends KafkaMetricsGroup {
+
   private var responseListeners: List[(Int) => Unit] = Nil
+
   private val requestQueue = new ArrayBlockingQueue[RequestChannel.Request](queueSize)
+
+  /**
+    *   队列数量
+    */
   private val responseQueues = new Array[BlockingQueue[RequestChannel.Response]](numProcessors)
+
   for(i <- 0 until numProcessors)
     responseQueues(i) = new LinkedBlockingQueue[RequestChannel.Response]()
 

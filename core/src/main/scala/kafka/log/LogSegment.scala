@@ -51,10 +51,13 @@ class LogSegment(val log: FileRecords,
                  val index: OffsetIndex,
                  val timeIndex: TimeIndex,
                  val baseOffset: Long,
-                 val indexIntervalBytes: Int,
+                 val indexIntervalBytes: Int, // 索引项之间间隔的最小字节数
                  val rollJitterMs: Long,
                  time: Time) extends Logging {
 
+   /**
+     * 标识LogSegment对象创建时间，当调用truncateTo()方法将整个日志文件清空时，会将此字段重置为当前时间。参与创建新LogSegment的条件判断，在介绍Log类时会详细介绍。
+     */
   private var created = time.milliseconds
 
   /* the number of bytes since we last added an entry in the offset index */
@@ -68,6 +71,7 @@ class LogSegment(val log: FileRecords,
   @volatile private var offsetOfMaxTimestamp = timeIndex.lastEntry.offset
 
   def this(dir: File, startOffset: Long, indexIntervalBytes: Int, maxIndexSize: Int, rollJitterMs: Long, time: Time, fileAlreadyExists: Boolean = false, initFileSize: Int = 0, preallocate: Boolean = false) =
+
     this(FileRecords.open(Log.logFile(dir, startOffset), fileAlreadyExists, initFileSize, preallocate),
          new OffsetIndex(Log.indexFilename(dir, startOffset), baseOffset = startOffset, maxIndexSize = maxIndexSize),
          new TimeIndex(Log.timeIndexFilename(dir, startOffset), baseOffset = startOffset, maxIndexSize = maxIndexSize),
@@ -99,10 +103,14 @@ class LogSegment(val log: FileRecords,
    */
   @nonthreadsafe
   def append(firstOffset: Long, largestOffset: Long, largestTimestamp: Long, shallowOffsetOfMaxTimestamp: Long, records: MemoryRecords) {
+
     if (records.sizeInBytes > 0) {
+
       trace("Inserting %d bytes at offset %d at position %d with largest timestamp %d at shallow offset %d"
           .format(records.sizeInBytes, firstOffset, log.sizeInBytes(), largestTimestamp, shallowOffsetOfMaxTimestamp))
+
       val physicalPosition = log.sizeInBytes()
+
       if (physicalPosition == 0)
         rollingBasedTimestamp = Some(largestTimestamp)
       // append the messages
@@ -114,6 +122,7 @@ class LogSegment(val log: FileRecords,
         maxTimestampSoFar = largestTimestamp
         offsetOfMaxTimestamp = shallowOffsetOfMaxTimestamp
       }
+
       // append an entry to the index (if needed)
       if(bytesSinceLastIndexEntry > indexIntervalBytes) {
         index.append(firstOffset, physicalPosition)
@@ -121,6 +130,7 @@ class LogSegment(val log: FileRecords,
         bytesSinceLastIndexEntry = 0
       }
       bytesSinceLastIndexEntry += records.sizeInBytes
+
     }
   }
 
@@ -134,7 +144,7 @@ class LogSegment(val log: FileRecords,
    * @param startingFilePosition A lower bound on the file position from which to begin the search. This is purely an optimization and
    * when omitted, the search will begin at the position in the offset index.
    * @return The position in the log storing the message with the least offset >= the requested offset and the size of the
-    *        message or null if no message meets this criteria.
+   *        message or null if no message meets this criteria.
    */
   @threadsafe
   private[log] def translateOffset(offset: Long, startingFilePosition: Int = 0): LogEntryPosition = {

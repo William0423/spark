@@ -91,7 +91,9 @@ class ControllerChannelManager(controllerContext: ControllerContext, config: Kaf
     debug("Controller %d trying to connect to broker %d".format(config.brokerId, broker.id))
     val brokerEndPoint = broker.getBrokerEndPoint(config.interBrokerListenerName)
     val brokerNode = new Node(broker.id, brokerEndPoint.host, brokerEndPoint.port)
+
     val networkClient = {
+
       val channelBuilder = ChannelBuilders.clientChannelBuilder(
         config.interBrokerSecurityProtocol,
         LoginType.SERVER,
@@ -121,7 +123,9 @@ class ControllerChannelManager(controllerContext: ControllerContext, config: Kaf
         time,
         false
       )
+
     }
+
     val threadName = threadNamePrefix match {
       case None => "Controller-%d-to-broker-%d-send-thread".format(config.brokerId, broker.id)
       case Some(name) => "%s:Controller-%d-to-broker-%d-send-thread".format(name, config.brokerId, broker.id)

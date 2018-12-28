@@ -27,23 +27,38 @@ import scala.collection.JavaConverters._
 
 object ByteBufferMessageSet {
 
+  /**
+    * 将Message集合按照指定的压缩类型进行压缩，此功能主要用于构建ByteBufferMessageSet对象
+    * @param offsetAssigner
+    * @param compressionCodec
+    * @param wrapperMessageTimestamp
+    * @param timestampType
+    * @param messages
+    * @return
+    */
   private def create(offsetAssigner: OffsetAssigner,
                      compressionCodec: CompressionCodec,
                      wrapperMessageTimestamp: Option[Long],
                      timestampType: TimestampType,
                      messages: Message*): ByteBuffer = {
+
     if (messages.isEmpty)
+
       MessageSet.Empty.buffer
+
     else {
+
       val magicAndTimestamp = wrapperMessageTimestamp match {
         case Some(ts) => MagicAndTimestamp(messages.head.magic, ts)
         case None => MessageSet.magicAndLargestTimestamp(messages)
       }
 
       val entries = messages.map(message => LogEntry.create(offsetAssigner.nextAbsoluteOffset(), message.asRecord))
-      val builder = MemoryRecords.builderWithEntries(timestampType, CompressionType.forId(compressionCodec.codec),
-        magicAndTimestamp.timestamp, entries.asJava)
+
+      val builder = MemoryRecords.builderWithEntries(timestampType, CompressionType.forId(compressionCodec.codec), magicAndTimestamp.timestamp, entries.asJava)
+
       builder.build().buffer
+
     }
   }
 
@@ -56,6 +71,10 @@ private object OffsetAssigner {
 
 }
 
+/**
+  * OffsetAssigner的功能是存储一串offset值，并像迭代器那样逐个返回，OffsetAssigner的实现很简单，读者可参看源码学习。
+  * @param offsets
+  */
 private class OffsetAssigner(offsets: Seq[Long]) {
   private var index = 0
 
@@ -133,25 +152,35 @@ class ByteBufferMessageSet(val buffer: ByteBuffer) extends MessageSet with Loggi
                           wrapperMessageTimestamp: Option[Long],
                           timestampType: TimestampType,
                           messages: Message*) {
+
     this(ByteBufferMessageSet.create(OffsetAssigner(offsetCounter, messages.size), compressionCodec,
       wrapperMessageTimestamp, timestampType, messages:_*))
+
   }
 
   def this(compressionCodec: CompressionCodec, offsetCounter: LongRef, messages: Message*) {
+
     this(compressionCodec, offsetCounter, None, TimestampType.CREATE_TIME, messages:_*)
+
   }
 
   def this(compressionCodec: CompressionCodec, offsetSeq: Seq[Long], messages: Message*) {
+
     this(ByteBufferMessageSet.create(new OffsetAssigner(offsetSeq), compressionCodec,
       None, TimestampType.CREATE_TIME, messages:_*))
+
   }
 
   def this(compressionCodec: CompressionCodec, messages: Message*) {
+
     this(compressionCodec, new LongRef(0L), messages: _*)
+
   }
 
   def this(messages: Message*) {
+
     this(NoCompressionCodec, messages: _*)
+
   }
 
   def getBuffer = buffer

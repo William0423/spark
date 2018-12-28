@@ -173,16 +173,32 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
       if(isShuttingDown.get)
         throw new IllegalStateException("Kafka server is still shutting down, cannot re-start!")
 
+      /**
+        * 一个CAS的操作isStartingUp，防止线程并发操作启动，判断是否可以启动。
+        */
       if(startupComplete.get)
         return
 
+      /**
+        * 修改变量isStartingUp的值
+        */
       val canStartup = isStartingUp.compareAndSet(false, true)
+
       if (canStartup) {
+        /**
+          * 设置broker的状态
+          */
         brokerState.newState(Starting)
 
+        /**
+          * 启动定时器kafkaScheduler.startup()
+          */
         /* start scheduler */
         kafkaScheduler.startup()
 
+        /**
+          * 构造zkUtils：利用参数中的zk信息，启动一个zk客户端
+          */
         /* setup zookeeper */
         zkUtils = initZk()
 
@@ -198,6 +214,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         val reporters = config.getConfiguredInstances(KafkaConfig.MetricReporterClassesProp, classOf[MetricsReporter],
             Map[String, AnyRef](KafkaConfig.BrokerIdProp -> (config.brokerId.toString)).asJava)
         reporters.add(new JmxReporter(jmxPrefix))
+
+        /**
+          * 构造Metrics类
+          */
         val metricConfig = KafkaServer.metricConfig(config)
         metrics = new Metrics(metricConfig, reporters, time, true)
 
@@ -206,14 +226,22 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
         /* start log manager */
         logManager = createLogManager(zkUtils.zkClient, brokerState)
+        // 启动文件管理器：读取zk中的配置信息，包含__consumer_offsets和system.topic
         logManager.startup()
+
 
         metadataCache = new MetadataCache(config.brokerId)
         credentialProvider = new CredentialProvider(config.saslEnabledMechanisms)
 
+        /**
+          * 启动一个NIO socket服务
+          */
         socketServer = new SocketServer(config, metrics, time, credentialProvider)
         socketServer.startup()
 
+        /**
+          * 启动ReplicaManager，也即副本管理器，用于管理每个topic-partition的副本状态，包括主从、ISR列表等。
+          */
         /* start replica manager */
         replicaManager = new ReplicaManager(config, metrics, time, zkUtils, kafkaScheduler, logManager,
           isShuttingDown, quotaManagers.follower)
@@ -225,11 +253,17 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
         adminManager = new AdminManager(config, metrics, metadataCache, zkUtils)
 
+        /**
+          * 启动GroupCoordinator，主要用于broker组管理和offset管理。
+          */
         /* start group coordinator */
         // Hardcode Time.SYSTEM for now as some Streams tests fail otherwise, it would be good to fix the underlying issue
         groupCoordinator = GroupCoordinator(config, zkUtils, replicaManager, Time.SYSTEM)
         groupCoordinator.startup()
 
+        /**
+          * 初始化授权认证管理器，用户可以自己通过参数authorizer.class.name指定具体的Authorizer实现。kafka自带有SimpleAclAuthorizer的简单实现
+          */
         /* Get the authorizer and initialize it if one is specified.*/
         authorizer = Option(config.authorizerClassName).filter(_.nonEmpty).map { authorizerClassName =>
           val authZ = CoreUtils.createObject[Authorizer](authorizerClassName)
@@ -237,11 +271,17 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           authZ
         }
 
+        /**
+          * 开启线程，开始处理请求：用于统一接收外部请求。
+          */
         /* start processing requests */
         apis = new KafkaApis(socketServer.requestChannel, replicaManager, adminManager, groupCoordinator,
           kafkaController, zkUtils, config.brokerId, config, metadataCache, metrics, authorizer, quotaManagers,
           clusterId, time)
 
+        /**
+          * 初始化KafkaRequestHandlerPool，内部是一个线程池，用于具体处理外部请求。
+          */
         requestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.requestChannel, apis, time,
           config.numIoThreads)
 
@@ -253,6 +293,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
                                                            ConfigType.User -> new UserConfigHandler(quotaManagers, credentialProvider),
                                                            ConfigType.Broker -> new BrokerConfigHandler(config, quotaManagers))
 
+        /**
+          * 启动DynamicConfigManager，通过动态配置管理器，监听zk上的配置节点变化，
+          * 并根据具体变化的配置信息调用TopicConfigHandler或ClientIdConfigHandler更新配置。
+          */
         // Create the config manager. start listening to notifications
         dynamicConfigManager = new DynamicConfigManager(zkUtils, dynamicConfigHandlers)
         dynamicConfigManager.startup()
@@ -264,6 +308,11 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           else
             endpoint
         }
+
+        /**
+          * 启动KafkaHealthcheck，用于在zk上注册当前broker节点信息，
+          * 以便节点退出时其他broker和consumer能监听到，目前的节点健康度判断比较简单，只是单纯的看zk上的节点是否存在。
+          */
         kafkaHealthcheck = new KafkaHealthcheck(config.brokerId, listeners, zkUtils, config.rack,
           config.interBrokerProtocolVersion)
         kafkaHealthcheck.startup()
@@ -274,11 +323,21 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         /* register broker metrics */
         registerStats()
 
+        /**
+          * 将当前broker的状态置为RunningAsBroker，这时，broker已经可以对外提供服务了。
+          */
         brokerState.newState(RunningAsBroker)
+
         shutdownLatch = new CountDownLatch(1)
+        /**
+          * 启动完成：状态改变
+          */
         startupComplete.set(true)
+
         isStartingUp.set(false)
+
         AppInfoParser.registerAppInfo(jmxPrefix, config.brokerId.toString)
+
         info("started")
       }
     }

@@ -58,7 +58,10 @@ class LogManager(val logDirs: Array[File],
   val InitialTaskDelayMs = 30*1000
 
   private val logCreationOrDeletionLock = new Object
+
+  // Pool[TopicAndPartition, Log]类型，用于管理TopicAndPartition与Log之间的对应关系。使用的是Kafka自定义的Pool类型对象，底层使用JDK提供的线程安全的HashMap——ConcurrentHashMap实现。
   private val logs = new Pool[TopicPartition, Log]()
+
   private val logsToBeDeleted = new LinkedBlockingQueue[Log]()
 
   createAndValidateLogDirs(logDirs)
@@ -195,31 +198,44 @@ class LogManager(val logDirs: Array[File],
   def startup() {
     /* Schedule the cleanup task to delete old logs */
     if(scheduler != null) {
+
+      /**
+        * 以下是一些定时任务
+        */
       info("Starting log cleanup with a period of %d ms.".format(retentionCheckMs))
+      // 启动log retention任务
       scheduler.schedule("kafka-log-retention",
                          cleanupLogs,
                          delay = InitialTaskDelayMs,
                          period = retentionCheckMs,
                          TimeUnit.MILLISECONDS)
+
       info("Starting log flusher with a default period of %d ms.".format(flushCheckMs))
-      scheduler.schedule("kafka-log-flusher", 
+      // 启动 log flusher任务
+      scheduler.schedule("kafka-log-flusher",
                          flushDirtyLogs, 
                          delay = InitialTaskDelayMs, 
                          period = flushCheckMs, 
                          TimeUnit.MILLISECONDS)
+
+      // 启动recovery point checkpoint任务
       scheduler.schedule("kafka-recovery-point-checkpoint",
                          checkpointRecoveryPointOffsets,
                          delay = InitialTaskDelayMs,
                          period = flushCheckpointMs,
                          TimeUnit.MILLISECONDS)
+
       scheduler.schedule("kafka-delete-logs",
                          deleteLogs,
                          delay = InitialTaskDelayMs,
                          period = defaultConfig.fileDeleteDelayMs,
                          TimeUnit.MILLISECONDS)
+
     }
+    // 根据配置确认是否启动这个cleaner线程
     if(cleanerConfig.enableCleaner)
       cleaner.startup()
+
   }
 
   /**

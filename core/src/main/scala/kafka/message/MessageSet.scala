@@ -91,21 +91,29 @@ abstract class MessageSet extends Iterable[MessageAndOffset] {
    * print the first 100.
    */
   override def toString: String = {
+
     val builder = new StringBuilder()
+
     builder.append(getClass.getSimpleName + "(")
+
     val iter = this.asRecords.shallowEntries.iterator
+
     var i = 0
     while(iter.hasNext && i < 100) {
+
       val message = iter.next
       builder.append(message)
       if(iter.hasNext)
         builder.append(", ")
       i += 1
+
     }
+
     if(iter.hasNext)
       builder.append("...")
     builder.append(")")
     builder.toString
+
   }
 
 }

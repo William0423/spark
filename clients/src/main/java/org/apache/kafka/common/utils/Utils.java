@@ -520,6 +520,7 @@ public class Utils {
      * @return The unstarted thread
      */
     public static Thread newThread(String name, Runnable runnable, boolean daemon) {
+
         Thread thread = new Thread(runnable, name);
         thread.setDaemon(daemon);
         thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
@@ -528,6 +529,7 @@ public class Utils {
             }
         });
         return thread;
+
     }
 
     /**

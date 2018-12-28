@@ -232,7 +232,10 @@ if [ -z "$KAFKA_HEAP_OPTS" ]; then
   KAFKA_HEAP_OPTS="-Xmx256M"
 fi
 
+# kafka的jvm 参数
+
 # JVM performance options
+# 对JVM进行一些优化配置
 if [ -z "$KAFKA_JVM_PERFORMANCE_OPTS" ]; then
   KAFKA_JVM_PERFORMANCE_OPTS="-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+DisableExplicitGC -Djava.awt.headless=true"
 fi
@@ -262,6 +265,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# 调整JVM GC相关的参数
 # GC options
 GC_FILE_SUFFIX='-gc.log'
 GC_LOG_FILE_NAME=''
@@ -274,6 +278,7 @@ fi
 (( CYGWIN )) && CLASSPATH=$(cygpath --path --mixed "${CLASSPATH}")
 
 # Launch mode
+# 确定是否后台启动
 if [ "x$DAEMON_MODE" = "xtrue" ]; then
   nohup $JAVA $KAFKA_HEAP_OPTS $KAFKA_JVM_PERFORMANCE_OPTS $KAFKA_GC_LOG_OPTS $KAFKA_JMX_OPTS $KAFKA_LOG4J_OPTS -cp $CLASSPATH $KAFKA_OPTS "$@" > "$CONSOLE_OUTPUT_FILE" 2>&1 < /dev/null &
 else

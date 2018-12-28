@@ -35,10 +35,11 @@ COMMAND=$1
 case $COMMAND in
   -daemon)
     EXTRA_ARGS="-daemon "$EXTRA_ARGS
-    shift
+    shift # 左移参数列表，即删除"-daemon" 参数
     ;;
   *)
     ;;
 esac
 
+# 调用kafka-run-class脚本
 exec $base_dir/kafka-run-class.sh $EXTRA_ARGS kafka.Kafka "$@"

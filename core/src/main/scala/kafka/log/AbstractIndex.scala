@@ -255,18 +255,30 @@ abstract class AbstractIndex[K, V](@volatile var file: File, val baseOffset: Lon
     // binary search for the entry
     var lo = 0
     var hi = _entries - 1
+
     while(lo < hi) {
+
       val mid = ceil(hi/2.0 + lo/2.0).toInt
+
       val found = parseEntry(idx, mid)
+
       val compareResult = compareIndexEntry(found, target, searchEntity)
+
       if(compareResult > 0)
+
         hi = mid - 1
+
       else if(compareResult < 0)
+
         lo = mid
+
       else
         return mid
+
     }
+
     lo
+
   }
 
   private def compareIndexEntry(indexEntry: IndexEntry, target: Long, searchEntity: IndexSearchEntity): Int = {

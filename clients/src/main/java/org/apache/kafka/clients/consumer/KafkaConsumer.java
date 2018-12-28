@@ -993,6 +993,9 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             long start = time.milliseconds();
             long remaining = timeout;
             do {
+                /**
+                 * note: 从订阅的 partition 中拉取数据,pollOnce() 才是对 Consumer 客户端拉取数据的核心实现
+                 */
                 Map<TopicPartition, List<ConsumerRecord<K, V>>> records = pollOnce(remaining);
                 if (!records.isEmpty()) {
                     // before returning the fetched records, we can send off the next round of fetches
@@ -1001,6 +1004,10 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     //
                     // NOTE: since the consumed position has already been updated, we must not allow
                     // wakeups or any other errors to be triggered prior to returning the fetched records.
+
+                    /**
+                     * 在返回数据之前，发送下次的 fetch 请求，避免用户在下次获取数据时线程 block
+                     */
                     if (fetcher.sendFetches() > 0 || client.pendingRequestCount() > 0)
                         client.pollNoWakeup();
 
@@ -1027,24 +1034,42 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * @return The fetched records (may be empty)
      */
     private Map<TopicPartition, List<ConsumerRecord<K, V>>> pollOnce(long timeout) {
+        /**
+         *         note： 1. 获取 GroupCoordinator 地址并连接、加入 Group、sync Group、自动 commit, join 及 sync 期间 group 会进行 rebalance
+         */
         coordinator.poll(time.milliseconds());
 
         // fetch positions if we have partitions we're subscribed to that we
         // don't know the offset for
+        /**
+         *     // note: 2. 更新订阅的 topic-partition 的 offset（如果订阅的 topic-partition list 没有有效的 offset 的情况下）
+         */
         if (!subscriptions.hasAllFetchPositions())
             updateFetchPositions(this.subscriptions.missingFetchPositions());
 
+        /**
+         * // note: 3. 获取 fetcher 已经拉取到的数据
+         */
         // if data is available already, return it immediately
         Map<TopicPartition, List<ConsumerRecord<K, V>>> records = fetcher.fetchedRecords();
         if (!records.isEmpty())
             return records;
+        /**
+         *     // note: 说明上次 fetch 到是的数据已经全部拉取了,需要再次发送 fetch 请求,从 broker 拉取数据
+         */
 
+        /**
+         *     // note: 4. 发送 fetch 请求,会从多个 topic-partition 拉取数据（只要对应的 topic-partition 没有未完成的请求）
+         */
         // send any new fetches (won't resend pending fetches)
         fetcher.sendFetches();
 
         long now = time.milliseconds();
         long pollTimeout = Math.min(coordinator.timeToNextPoll(now), timeout);
 
+        /**
+         * //note: 5. 调用 poll 方法发送请求（底层发送请求的接口）
+         */
         client.poll(pollTimeout, now, new PollCondition() {
             @Override
             public boolean shouldBlock() {
@@ -1054,6 +1079,9 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             }
         });
 
+        /**
+         *     //note: 6. 如果 group 需要 rebalance,直接返回空数据,这样更快地让 group 进行稳定状态
+         */
         // after the long poll, we should check whether the group needs to rebalance
         // prior to returning data so that the group can stabilize faster
         if (coordinator.needRejoin())
